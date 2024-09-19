@@ -1,0 +1,18 @@
+{
+    "Regression Metrics": {
+        "MSE": 0.4089,
+        "RMSE": 0.6395,
+        "MAE": 0.4729,
+        "R2": 0.8088,
+        "PCC": 0.9031
+    },
+    "Classification Metrics": {
+        "Accuracy": 0.8941,
+        "Precision": 0.7096,
+        "Recall": 0.77,
+        "F1-Score": 0.7386,
+        "AUC-ROC": 0.9282,
+        "AUC-PR": 0.8053,
+        "MCC": 0.6732
+    }
+}
