@@ -1,0 +1,11 @@
+aggrepred/weights/seq/
+aggrepred/weights/graph
+
+data/fasta/
+data/graph/
+data/graph_antibody/
+data/pisces/
+data/score/
+data/score_big/
+data/summary/
+preprocess/foldxLinux64_0/

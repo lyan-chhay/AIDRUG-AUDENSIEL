@@ -1,0 +1,14 @@
+numpy
+pandas
+matplotlib
+tqdm
+requests
+scikit-learn
+wget
+transformers
+pyg 
+einops
+streamlit
+biopython
+mmseqs2
+antiberty
