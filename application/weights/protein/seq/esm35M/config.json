@@ -1,0 +1,22 @@
+{
+    "antibody": false,
+    "use_local": true,
+    "use_global": true,
+    "num_localextractor_block": 3,
+    "input_dim": 1000,
+    "output_dim": 1000,
+    "in_channel": 480,
+    "out_channel": 256,
+    "kernel_size": 23,
+    "dilation": 1,
+    "stride": 1,
+    "rnn_hid_dim": 128,
+    "rnn_layers": 1,
+    "bidirectional": true,
+    "rnn_dropout": 0.2,
+    "attention_heads": 4,
+    "learning_rate": 0.001,
+    "batch_size": 32,
+    "nb_epochs": 20,
+    "encode_mode": "esm"
+}
