@@ -36,23 +36,8 @@ def main():
     seed_everything(seed=42)
     st.set_page_config(page_title="Aggrepred", layout="wide")
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    ######################
-    ## load protein model, load antibody model
-    ######################
-    seq_weight_path = "weights/protein/seq/onehot_meiler"
-    # seq_weight_path = "weights/protein/seq/esm35M"
-    seq_model, seq_config = define_load_seq_model(seq_weight_path)  
-    seq_model = seq_model.to(device)
-
-    graph_weight_path = "weights/protein/graph"
-    graph_model, graph_config = define_load_graph_model(graph_weight_path)
-    graph_model = graph_model.to(device)
- 
-    seq_weight_path = "weights/antibody/onehot_meiler"
-    antibody_seq_model, antibody_config = define_load_seq_model(seq_weight_path)  
-    antibody_seq_model = antibody_seq_model.to(device)
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device =  "cpu"
 
     #####################
 
@@ -81,13 +66,24 @@ def main():
         # selected_tab = st.radio("Go to", ["General Proteins", "Antibodies"])
 
     if selected_tab == "Antibodies":
+
+        ######################
+        ## load protein model, load antibody model
+        ######################
+        print(device)
+        
+    
+        seq_weight_path = "weights/antibody/onehot_meiler"
+        antibody_seq_model, antibody_config = define_load_seq_model(seq_weight_path, device)  
+        antibody_seq_model = antibody_seq_model.to(device)
+
         if "heavy_chain" not in st.session_state:
             st.session_state.heavy_chain = ""
         if "light_chain" not in st.session_state:
             st.session_state.light_chain = ""
   
 
-        print("")
+     
         heavy_chain = st.text_area("Enter Heavy Chain Sequence", value=st.session_state.heavy_chain, height=100)
         if st.button("Load Example Heavy Chain"):
             st.session_state.heavy_chain = '''QVQLVQSGVEVKKPGASVKVSCKASGYTFTNYYMYWVRQAPGQGLEWMGGINPSNGGTNFNEKFKNRVTLTTDSSTTTAYMELKSLQFDDTAVYYCAR
@@ -97,7 +93,7 @@ def main():
         
         light_chain = st.text_area("Enter Light Chain Sequence", value=st.session_state.light_chain, height=100)
         if st.button("Load Example Light Chain"):
-            st.session_state.light_chain = '''EIVLTQSPATLSLSPGERATLSCRASKGVSTSGYSYLHWYQQKPGQAPRLLIYLASYLESGVPARFSGSGSGTDFTLTISSLEPEDFAVYYCQHSRDL
+            st.session_state.light_chain = '''EIVLTQSPATLSLSPGERATLSCRASKGVSTSGYSYLHWYQQKPGQAPRLLIYLASYLESGVPARFSGSGSGTDFTLTISSLEPEDFAVYYCQH
             '''
             light_chain = st.session_state.light_chain
             st.experimental_rerun() 
@@ -111,9 +107,8 @@ def main():
             if heavy_chain and light_chain:
                 seed_everything(seed=42)
                 torch.cuda.empty_cache()
-                seq_model.eval()
-                print("Model in eval mode:", seq_model.training)
-            
+                antibody_seq_model.eval()
+                
                 results_df = perform_prediction_antibody(antibody_seq_model,heavy_chain,light_chain,antibody_config,device)
 
             
@@ -127,21 +122,32 @@ def main():
                 tab1, tab2 = st.tabs(["🗃 Aggregation Score Predictions", " 📈 Aggregation Score Plots"])
 
                 with tab1:
-                    st.subheader(f'Predicted Aggregation Score Table:')
-                    display_aggregation_table(results_df)
-
-                with tab2:
                     st.subheader(f'Predicted Aggregation Score Plot:')
                     for protein in results_df['Protein'].unique():
                         plot_protein_values(results_df[results_df['Protein'] == protein])
                     if auto_mutate:
                         st.subheader("Recommendation for new mutants to reduce aggregation:")
                         st.dataframe(mutate_result_df.head(10))
+                    
+
+                with tab2:
+                    st.subheader(f'Predicted Aggregation Score Table:')
+                    display_aggregation_table(results_df)
+                    
                 
             else:
                 st.warning("Please enter both the heavy chain and light chain sequences.")
 
     elif selected_tab == "Proteins":
+        
+        seq_weight_path = "weights/protein/seq/onehot_meiler"
+        # seq_weight_path = "weights/protein/seq/esm35M"
+        seq_model, seq_config = define_load_seq_model(seq_weight_path, device)  
+        seq_model = seq_model.to(device)
+
+        graph_weight_path = "weights/protein/graph"
+        graph_model, graph_config = define_load_graph_model(graph_weight_path, device)
+        graph_model = graph_model.to(device)
 
         input_type = st.radio("Choose input type:", ("Sequence-based", "Structure-based"), key="protein_input_type")
         
@@ -191,7 +197,7 @@ def main():
                     seed_everything(seed=42)
                     torch.cuda.empty_cache()
                     seq_model.eval()
-                    print("Model in eval mode:", seq_model.training)
+                    # print("Model in eval mode:", seq_model.training)
 
                     if protein_sequences:
                         print("Starting prediction")
@@ -210,16 +216,18 @@ def main():
 
                         tab1, tab2 = st.tabs(["🗃 Aggregation Score Predictions", " 📈 Aggregation Score Plots"])
                         with tab1:
-                            st.subheader(f'Predicted Aggregation Score Table:')
-                            display_aggregation_table(results_df)
-
-                        with tab2:
                             st.subheader(f'Predicted Aggregation Score Plot:')
                             for protein in results_df['Protein'].unique():
                                 plot_protein_values(results_df[results_df['Protein'] == protein])
                             if auto_mutate:
                                 st.subheader("Recommendation for new mutants to reduce aggregation:")
                                 st.dataframe(mutate_result_df.head(10))
+                            
+
+                        with tab2:
+                            st.subheader(f'Predicted Aggregation Score Table:')
+                            display_aggregation_table(results_df)
+                            
 
                     else:
                         st.warning("Please enter protein sequences or upload a FASTA file.")
@@ -241,7 +249,7 @@ def main():
                     seed_everything(seed=42)
                     torch.cuda.empty_cache()
                     graph_model.eval()
-                    print("Model in eval mode:", graph_model.training)
+                    # print("Model in eval mode:", graph_model.training)
                     dataloader = graphDataLoader([g], batch_size=1, shuffle=False)
                     
                     if g:
@@ -278,14 +286,14 @@ def main():
 
                         tab1, tab2 = st.tabs(["🗃 Aggregation Score Predictions", " 📈 Aggregation Score Plots"])
                         with tab1:
-                            st.subheader(f'Predicted Aggregation Score Table:')
-                            display_aggregation_table(results_df)
-
-                        with tab2:
                             st.subheader(f'Predicted Aggregation Score Plot:')
                             for protein in results_df['Protein'].unique():
                                 plot_protein_values(results_df[results_df['Protein'] == protein])
-                        
+                            
+                        with tab2:
+                            st.subheader(f'Predicted Aggregation Score Table:')
+                            display_aggregation_table(results_df)
+
                     else:
                         st.warning("No graph created, something wrong with pdb file.")
 

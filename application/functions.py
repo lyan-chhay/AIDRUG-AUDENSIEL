@@ -73,8 +73,6 @@ def perform_prediction_antibody(antibody_seq_model,heavy_chain,light_chain,antib
     results_df = pd.DataFrame(columns=['Protein', 'Position', 'Amino Acid', 'Predicted Value'])
         
     with torch.no_grad():
-        print(len(heavy_chain))
-        print(len(light_chain))
 
         H_mask = torch.zeros(450, dtype=torch.bool)
         H_mask[:len(heavy_chain)] = True  # Set the first 'len(Hchain_scores)' to 1
@@ -123,70 +121,6 @@ def perform_prediction_antibody(antibody_seq_model,heavy_chain,light_chain,antib
                     'Predicted Value': value.item()
                 })
 
-        results_df = pd.concat([results_df, pd.DataFrame(new_rows)], ignore_index=True)
-
-    return results_df
-
-
-def perform_prediction_antibody_multiple(antibody_seq_model,heavy_chains,light_chains,antibody_config,device):
-    results_df = pd.DataFrame(columns=['Protein', 'Chain','Position', 'Amino Acid', 'Predicted Value'])
-        
-    with torch.no_grad():
-
-        heavy_lens = [len(chain) for chain in heavy_chains]
-        light_lens = [len(chain) for chain in light_chains]
-
-        H_masks = create_mask(heavy_lens ,450)
-        L_masks = create_mask(light_lens,250)
-
-        print(H_masks.size())
-        print(L_masks.size())
-
-        masks = torch.cat((H_masks, L_masks ), dim=1)
-        print(masks.size())
-    
-        if antibody_config['encode_mode'] == 'esm':
-            esm_model, alphabet = esm.pretrained.esm2_t12_35M_UR50D()
-            esm_model = esm_model.eval()  # Set the model to evaluation mode
-
-            Hchain_x = embed_esm_batch([heavy_chains],  esm_model, alphabet).to(device)
-            Lchain_x = embed_esm_batch([light_chains],  esm_model, alphabet).to(device)
-            Hchain_x   = F.pad(Hchain_x, (0, 0, 0, max(450 - Hchain_x.size(1), 0)))
-            Lchain_x   = F.pad(Lchain_x, (0, 0, 0, max(250 - Lchain_x.size(1), 0)))
-        
-        elif antibody_config['encode_mode'] == 'onehot':
-            Hchain_x = onehot_encode_batch([heavy_chains], 450).to(device)
-            Lchain_x = onehot_encode_batch([light_chains], 250).to(device)
-        else:
-            Hchain_x = onehot_meiler_encode_batch([heavy_chains], 450).to(device)
-            Lchain_x = onehot_meiler_encode_batch([light_chains], 250).to(device)
-        
-
-        x = torch.cat((Hchain_x, Lchain_x), dim=1)
-
-        _, out = antibody_seq_model(x, masks)
-        
-        new_rows = []
-
-        # Process the predictions for each pair of heavy and light chains in the batch
-        for i, (heavy_chain, light_chain) in enumerate(zip(heavy_chains, light_chains)):
-            cleaned_output_heavy = clean_output(out[i][:450], H_masks[i])  # Heavy chain for sample i
-            cleaned_output_light = clean_output(out[i][450:], L_masks[i])  # Light chain for sample i
-
-            # Populate the results for heavy and light chains of each sample
-            for chain, cleaned_output, seq, label in [(heavy_chain, cleaned_output_heavy, heavy_chain, 'Heavy Chain'),
-                                                      (light_chain, cleaned_output_light, light_chain, 'Light Chain')]:
-                chain_type = 'Heavy' if label == 'Heavy Chain' else 'Light'
-                for pos, (aa, value) in enumerate(zip(seq, cleaned_output)):
-                    new_rows.append({
-                        'Protein': f'Antibody_{i + 1}',  
-                        'Chain': chain_type,  
-                        'Position': pos + 1,
-                        'Amino Acid': aa,
-                        'Predicted Value': value.item()
-                    })
-
-        # Append the rows to the final DataFrame
         results_df = pd.concat([results_df, pd.DataFrame(new_rows)], ignore_index=True)
 
     return results_df
@@ -249,7 +183,6 @@ def get_ddg(header_wild,wild_sequence,headers_mutate, mutated_sequences, mutatio
     exit_status = os.system(command)
     
     command = f"CUDA_VISIBLE_DEVICES=0 python THPLM/THPLM_predict.py {var_path} {wild_fasta_path} {embed_dir} {mutate_fasta_path} --gpunumber 0 --extractfile THPLM/esmscripts/extract.py > {output_file}"
-    # print(command)
     exit_status = os.system(command)
 
     if exit_status == 0:
@@ -257,8 +190,6 @@ def get_ddg(header_wild,wild_sequence,headers_mutate, mutated_sequences, mutatio
         with open(output_file, 'r') as f:
             lines = f.readlines()
             last_line = lines[-1]
-
-            print(last_line)
 
         try:
             # Parse the last line as a Python dictionary # Convert the dictionary to a DataFrame
@@ -329,35 +260,6 @@ def perform_auto_mutate(antibody,results_df,seq_model,seq_config, device,wild_fa
     final_df = final_df.rename(columns={'Protein': 'Mutant'})  
 
     return final_df
-
-#######################
-## other functions
-#######################
-def seed_everything(seed=42):
-    random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    
-def create_mask(lengths, max_length=1000):
-    max_length = min(max(lengths),1000)
-    batch_size = len(lengths)
-    mask = torch.zeros((batch_size, max_length), dtype=torch.bool)
-    
-    for i, length in enumerate(lengths):
-        mask[i, :length] = True
-    
-    return mask
-
-def read_fasta(fasta_text):
-    headers = []
-    sequences = []
-    for record in SeqIO.parse(fasta_text, "fasta"):
-        headers.append(record.id)
-        sequences.append(str(record.seq))
-    return headers, sequences
 
 
 
@@ -448,6 +350,7 @@ def define_load_seq_model(weight_path, device='cuda'):
     checkpoint_path = os.path.join(weight_path, "model_best.pt")
 
     if os.path.exists(checkpoint_path):
+        print(device)
         checkpoint = torch.load(checkpoint_path, map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'])
         print('Loading model successfully')
@@ -477,3 +380,33 @@ def define_load_graph_model(weight_path, device='cuda'):
         print('No model found')
 
     return model, config
+
+
+#######################
+## other functions
+#######################
+def seed_everything(seed=42):
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    
+def create_mask(lengths, max_length=1000):
+    max_length = min(max(lengths),1000)
+    batch_size = len(lengths)
+    mask = torch.zeros((batch_size, max_length), dtype=torch.bool)
+    
+    for i, length in enumerate(lengths):
+        mask[i, :length] = True
+    
+    return mask
+
+def read_fasta(fasta_text):
+    headers = []
+    sequences = []
+    for record in SeqIO.parse(fasta_text, "fasta"):
+        headers.append(record.id)
+        sequences.append(str(record.seq))
+    return headers, sequences
