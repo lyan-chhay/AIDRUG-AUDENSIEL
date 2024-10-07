@@ -17,6 +17,7 @@ import torch.nn.functional as F
 import subprocess
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader as graphDataLoader
+import plotly.graph_objects as go
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../')
 from aggrepred.model import Aggrepred, clean_output
@@ -58,7 +59,7 @@ def perform_prediction(seq_model, protein_sequences, headers, seq_config, device
                 cleaned_output = clean_output(out[j], masks[j])
                 for k, value in enumerate(cleaned_output):
                     new_rows.append({
-                        'Protein': headers[j],
+                        'Protein': headers[32*i+j],
                         'Position': k + 1,
                         'Amino Acid': sequence[k],
                         'Predicted Value': value.item()
@@ -126,22 +127,35 @@ def perform_prediction_antibody(antibody_seq_model,heavy_chain,light_chain,antib
     return results_df
 
 
-def select_mutant_residue(result_df, alpha=0.5):
+def select_mutant_residue(result_df, alpha=0.2, antibody=False, chain_type=None):
     # Initialize lists to store results
     wild_sequence = None
     mutated_sequences = []
     mutation_variants = []
     mutated_headers = []
 
+    # Define CDR regions (using Kabat numbering)
+    CDRs = {
+        'heavy': [(31, 35), (50, 65), (95, 102)],  # Kabat numbering for heavy chain CDR1, CDR2, CDR3
+        'light': [(24, 34), (50, 56), (89, 97)]   # Kabat numbering for light chain CDR1, CDR2, CDR3
+    }
+
     # Group by protein (header)
     for header, group in result_df.groupby('Protein'):
         wild_sequence = group['Amino Acid'].str.cat()
         mutated_sequence = list(wild_sequence)
-        variants = []
 
         # Iterate over each row in the group
-        for _, row in group.iterrows():
+        for j, row in group.iterrows():
             if row['Predicted Value'] > alpha:
+                
+                # Check if the current position is within a CDR region for antibodies
+                if antibody and chain_type in CDRs:
+                    cdr_regions = CDRs[chain_type]
+                    in_cdr = any(start <= row['Position'] <= end for start, end in cdr_regions)
+                    if in_cdr:
+                        continue 
+
                 position = row['Position'] - 1  # Convert 1-based position to 0-based index
                 original_aa = row['Amino Acid']
                 mutations = ['E', 'K', 'D', 'R']
@@ -172,13 +186,13 @@ def get_ddg(header_wild,wild_sequence,headers_mutate, mutated_sequences, mutatio
     # Write mutation variants to var_path
     with open(var_path, 'w') as f:
         for variant in mutation_variants:
-            # print(variant)
             f.write(f"{variant}\n")
 
     ##run the energy change with THPLM
     output_file = os.path.join(temp_THPLM_dir, "output.txt")
     command = f"python THPLM/esmscripts/extract.py esm2_t36_3B_UR50D {mutate_fasta_path}  {embed_dir} --repr_layers 36 --include mean --toks_per_batch 4096"
     exit_status = os.system(command)
+    
     command = f"python THPLM/esmscripts/extract.py esm2_t36_3B_UR50D {wild_fasta_path}  {embed_dir} --repr_layers 36 --include mean --toks_per_batch 4096"
     exit_status = os.system(command)
     
@@ -207,19 +221,25 @@ def perform_auto_mutate(antibody,results_df,seq_model,seq_config, device,wild_fa
     if antibody: 
         out_df = pd.DataFrame(columns=['Protein', 'Predicted Value'])
         
-        heavy_wild_sequence, heavy_mutated_sequences, heavy_mutation_variants, heavy_header_wild, heavy_headers_mutate = select_mutant_residue(results_df[results_df['Protein']=='Heavy'], threshold)
-        light_wild_sequence, light_mutated_sequences, light_mutation_variants, light_header_wild, light_headers_mutate = select_mutant_residue(results_df[results_df['Protein']=='Light'], threshold)
+        heavy_wild_sequence, heavy_mutated_sequences, heavy_mutation_variants, heavy_header_wild, heavy_headers_mutate = select_mutant_residue(results_df[results_df['Protein']=='Heavy'], threshold, True,'Heavy')
+        light_wild_sequence, light_mutated_sequences, light_mutation_variants, light_header_wild, light_headers_mutate = select_mutant_residue(results_df[results_df['Protein']=='Light'], threshold, True,'Light')
         
         new_rows =[]
-        for i, (heavy_header_mutate, heavy_mutated_sequence, light_wild_sequence) in enumerate(zip(heavy_headers_mutate,heavy_mutated_sequences ,[light_wild_sequence]*len(heavy_mutated_sequences))):
+        all_out_df = [] 
+        for i, (heavy_header_mutate, heavy_mutated_sequence, light_wild_sequence,heavy_mutation_variant) in enumerate(zip(heavy_headers_mutate,heavy_mutated_sequences ,[light_wild_sequence]*len(heavy_mutated_sequences),heavy_mutation_variants)):
             heavy_mutate_result_df = perform_prediction_antibody(seq_model,heavy_mutated_sequence, light_wild_sequence,seq_config, device)
+            heavy_mutate_result_df['variant'] = heavy_mutation_variant
+            all_out_df.append(heavy_mutate_result_df)
             score_average = heavy_mutate_result_df['Predicted Value'].mean()
             new_rows.append({
                         'Protein': heavy_header_mutate,  
                         'Predicted Value': score_average
                     })
-        for i, (light_header_mutate, heavy_wild_sequence, light_mutated_sequence) in enumerate(zip(light_headers_mutate,[heavy_wild_sequence]*len(light_mutated_sequences) ,light_mutated_sequences)):
+        
+        for i, (light_header_mutate, heavy_wild_sequence, light_mutated_sequence,light_mutation_variant)in enumerate(zip(light_headers_mutate,[heavy_wild_sequence]*len(light_mutated_sequences) ,light_mutated_sequences,light_mutation_variants)):
             light_mutate_result_df = perform_prediction_antibody(seq_model,heavy_wild_sequence, light_mutated_sequence,seq_config, device)
+            light_mutate_result_df['variant'] = light_mutation_variant
+            all_out_df.append(light_mutate_result_df)
             score_average = light_mutate_result_df['Predicted Value'].mean()
             new_rows.append({
                         'Protein': light_header_mutate,  
@@ -227,9 +247,21 @@ def perform_auto_mutate(antibody,results_df,seq_model,seq_config, device,wild_fa
                     })
             
         out_df = pd.concat([out_df, pd.DataFrame(new_rows)], ignore_index=True)
-        
+        all_out_df = pd.concat(all_out_df, ignore_index=True)
+ 
         wild_avg_value = results_df['Predicted Value'].mean().mean()
         out_df['Score Difference'] = out_df['Predicted Value'].apply(lambda val: val - wild_avg_value)
+
+        apr_counts = all_out_df[all_out_df['Predicted Value'] > 0].groupby(['Protein', 'variant'])['Predicted Value'].count().reset_index()
+        apr_counts = apr_counts.rename(columns={'Predicted Value': 'APR'})
+        apr_counts['Protein'] = apr_counts['Protein'] + "_" + apr_counts['variant']
+
+        # Merge APR count with out_df
+        out_df = out_df.merge(apr_counts, on='Protein', how='left')
+
+        # Fill missing APR Number with 0 (in case there are no values > 0 for some proteins)
+        out_df['APR'] = out_df['APR'].fillna(0)
+
 
         if use_ddg:
             ddg_df1 = get_ddg(heavy_header_wild,heavy_wild_sequence,heavy_headers_mutate,heavy_mutated_sequences, heavy_mutation_variants, wild_fasta_path,mutate_fasta_path,var_path,temp_THPLM_dir,embed_dir)
@@ -237,9 +269,10 @@ def perform_auto_mutate(antibody,results_df,seq_model,seq_config, device,wild_fa
             ddg_df = pd.concat([ddg_df1, ddg_df2], axis=0)
 
     else:
+        wild_sequence, mutated_sequences, mutation_variants, header_wild, headers_mutate = select_mutant_residue(results_df, threshold)
         
-        wild_sequence, mutated_sequences, mutation_variants, header_wild, headers_mutate = select_mutant_residue(results_df, 0.5)
         mutate_result_df = perform_prediction(seq_model, mutated_sequences, headers_mutate, seq_config, device)
+        all_out_df = mutate_result_df.copy()
 
         # Calculate average predicted value for each protein
         wild_avg_value = results_df.groupby('Protein')['Predicted Value'].mean().mean()
@@ -248,18 +281,29 @@ def perform_auto_mutate(antibody,results_df,seq_model,seq_config, device,wild_fa
 
         out_df['Score Difference'] = out_df['Predicted Value'] - wild_avg_value
 
+        # Calculate APR number (count of 'Predicted Value' > 0 for each protein)
+        apr_counts = mutate_result_df[mutate_result_df['Predicted Value'] > 0].groupby('Protein')['Predicted Value'].count().reset_index()
+        apr_counts = apr_counts.rename(columns={'Predicted Value': 'APR'})
+
+        # Merge APR count with out_df
+        out_df = out_df.merge(apr_counts, on='Protein', how='left')
+
+        # Fill missing APR Number with 0 (in case there are no values > 0 for some proteins)
+        out_df['APR'] = out_df['APR'].fillna(0)
+
         if use_ddg:
             ddg_df = get_ddg(header_wild,wild_sequence,headers_mutate, mutated_sequences, mutation_variants, wild_fasta_path,mutate_fasta_path,var_path,temp_THPLM_dir,embed_dir)
         
     if use_ddg:
-        out_df = pd.merge(out_df, ddg_df, on='Protein')[['Protein', 'DDG', 'Score Difference']]
-        final_df = out_df.sort_values(by=['DDG','Score Difference'], ascending=True)
+        out_df = pd.merge(out_df, ddg_df, on='Protein')[['Protein', 'APR' , 'Score Difference', 'DDG']]
+        # final_df = out_df.sort_values(by=['DDG','Score Difference'], ascending=True)
+        final_df = out_df.sort_values(by=['APR','Score Difference','DDG'], ascending=True)
     else:
-        final_df = out_df[['Protein', 'Score Difference']].sort_values(by='Score Difference', ascending=True)
+        final_df = out_df[['Protein', 'APR','Score Difference']].sort_values(by=['APR','Score Difference'], ascending=True)
 
     final_df = final_df.rename(columns={'Protein': 'Mutant'})  
 
-    return final_df
+    return final_df, all_out_df 
 
 
 
@@ -334,6 +378,46 @@ def plot_protein_values(protein_df):
 
     st.plotly_chart(fig, use_container_width=True)
 
+
+def plot_protein_comparison(original_df, mutated_dfs, original_label="Original", mutant_labels=None):
+  
+    fig = go.Figure()
+    # Update y-axis range
+    fig.update_yaxes(range=[-5, 5])
+
+    # Add a red line at y=0
+    fig.add_shape(
+        type="line",
+        x0=original_df['Position'].min(), x1=original_df['Position'].max(),
+        y0=0, y1=0,
+        line=dict(color="red", width=2, dash="dash")
+    )
+
+    # Add original protein plot using add_scatter
+    fig.add_scatter(x=original_df['Position'], y=original_df['Predicted Value'], mode="lines+markers+text",
+                    text=original_df['Amino Acid'],
+                    hovertemplate="<br>".join([
+                        "Position: %{x}",
+                        "Amino Acid: %{text}",
+                        "Predicted Value: %{y:.2f}"
+                    ]),
+                    name=original_label)
+    # Add mutation plots
+    for idx, mutant_df in enumerate(mutated_dfs):
+        label = mutant_labels[idx] if mutant_labels else f"Mutant {idx + 1}"
+        fig.add_scatter(x=mutant_df['Position'], y=mutant_df['Predicted Value'], mode="lines+markers+text",
+                        text=mutant_df['Amino Acid'],
+                        hovertemplate="<br>".join([
+                            "Position: %{x}",
+                            "Amino Acid: %{text}",
+                            "Predicted Value: %{y:.2f}"
+                        ]),
+                        name=label)
+    
+
+
+    # Display the plot
+    st.plotly_chart(fig, use_container_width=True)
 
 
 
