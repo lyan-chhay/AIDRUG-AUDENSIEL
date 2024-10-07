@@ -30,14 +30,17 @@ sys.path.insert(0, top_folder_path)
 # Set the MKL_THREADING_LAYER environment variable to 'GNU'
 os.environ['MKL_THREADING_LAYER'] = 'GNU'
 
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
+
 
 # Streamlit app
 def main():
     seed_everything(seed=42)
     st.set_page_config(page_title="Aggrepred", layout="wide")
 
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    device =  "cpu"
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     #####################
 
@@ -82,28 +85,26 @@ def main():
         if "light_chain" not in st.session_state:
             st.session_state.light_chain = ""
   
-
      
         heavy_chain = st.text_area("Enter Heavy Chain Sequence", value=st.session_state.heavy_chain, height=100)
         if st.button("Load Example Heavy Chain"):
-            st.session_state.heavy_chain = '''QVQLVQSGVEVKKPGASVKVSCKASGYTFTNYYMYWVRQAPGQGLEWMGGINPSNGGTNFNEKFKNRVTLTTDSSTTTAYMELKSLQFDDTAVYYCAR
-            '''
+            st.session_state.heavy_chain = '''QVQLVQSGVEVKKPGASVKVSCKASGYTFTNYYMYWVRQAPGQGLEWMGGINPSNGGTNFNEKFKNRVTLTTDSSTTTAYMELKSLQFDDTAVYYCARRDYRFDMGFDYWGQGTTVTVSS'''
             heavy_chain = st.session_state.heavy_chain
             st.experimental_rerun() 
         
         light_chain = st.text_area("Enter Light Chain Sequence", value=st.session_state.light_chain, height=100)
         if st.button("Load Example Light Chain"):
-            st.session_state.light_chain = '''EIVLTQSPATLSLSPGERATLSCRASKGVSTSGYSYLHWYQQKPGQAPRLLIYLASYLESGVPARFSGSGSGTDFTLTISSLEPEDFAVYYCQH
-            '''
+            st.session_state.light_chain = '''EIVLTQSPATLSLSPGERATLSCRASKGVSTSGYSYLHWYQQKPGQAPRLLIYLASYLESGVPARFSGSGSGTDFTLTISSLEPEDFAVYYCQHSRDLPLTFGGGTKVEI'''
             light_chain = st.session_state.light_chain
             st.experimental_rerun() 
 
-        # Add the 'Auto-Mutate' checkbox
+        st.write('Option:')
         auto_mutate = st.checkbox("Auto-Mutate",help="Automatically mutate the protein to reduce overall aggregation.")
-        use_ddg = st.checkbox("Calculate Energy Change", help="This will calculate the energy change (ΔΔG) upon mutation. \nNote: It may take more time for large proteins or if there are many positive residues.")
-        threshold =  st.slider("Select a value", min_value=0.0, max_value=2.0, step=0.1,help="This is the threshold you want to mutate the residue. The default value is 0.")
+        use_ddg = st.checkbox("Calculate Free Energy Change", help="This will calculate the energy change (ΔΔG) upon mutation. \nNote: It may take more time for large proteins or if there are many positive residues.")
 
+        
         if st.button("Predict"):
+
             if heavy_chain and light_chain:
                 seed_everything(seed=42)
                 torch.cuda.empty_cache()
@@ -114,27 +115,92 @@ def main():
             
                 ##mutate the residue
                 if auto_mutate:
-                    mutate_result_df = perform_auto_mutate(True,results_df,antibody_seq_model,antibody_config, device,wild_fasta_path,mutate_fasta_path,var_path,temp_THPLM_dir,embed_dir,use_ddg ,threshold)
-                           
+                    mutate_result_df, all_mutate_out_df = perform_auto_mutate(True,results_df,antibody_seq_model,antibody_config, device,wild_fasta_path,mutate_fasta_path,var_path,temp_THPLM_dir,embed_dir,use_ddg)
+
                     
                 st.subheader('Predicted Aggregation Score:')
+
+                top_k = 5
 
                 tab1, tab2 = st.tabs(["🗃 Aggregation Score Predictions", " 📈 Aggregation Score Plots"])
 
                 with tab1:
                     st.subheader(f'Predicted Aggregation Score Plot:')
+                    
+                    APR_wild_heavy_count = results_df[(results_df['Protein'] == 'Heavy') & (results_df['Predicted Value'] > 0)].shape[0]
+                    APR_wild_light_count = results_df[(results_df['Protein'] == 'Light') & (results_df['Predicted Value'] > 0)].shape[0]
+                    
                     for protein in results_df['Protein'].unique():
                         plot_protein_values(results_df[results_df['Protein'] == protein])
+
                     if auto_mutate:
-                        st.subheader("Recommendation for new mutants to reduce aggregation:")
-                        st.dataframe(mutate_result_df.head(10))
-                    
+                        st.subheader("Suggestions for New Mutants to Minimize Overall Aggregation:")
+                        # st.dataframe(mutate_result_df.head(top_k))
+                     
+                        list_heavy_mutated_dfs = []
+                        list_light_mutated_dfs = []
+
+                        if use_ddg:
+                            # Exclude mutants with positive DDG
+                            heavy_mutants = mutate_result_df[
+                                (mutate_result_df['Mutant'].str.startswith('Heavy')) & 
+                                (mutate_result_df['DDG'] <= 0)
+                            ].nsmallest(top_k, ['APR', 'Score Difference', 'DDG'])
+
+                            light_mutants = mutate_result_df[
+                                (mutate_result_df['Mutant'].str.startswith('Light')) & 
+                                (mutate_result_df['DDG'] <= 0)
+                            ].nsmallest(top_k, ['APR', 'Score Difference', 'DDG'])
+                        else:
+                            heavy_mutants = mutate_result_df[mutate_result_df['Mutant'].str.startswith('Heavy')].nsmallest(top_k, ['APR', 'Score Difference'])
+                            light_mutants = mutate_result_df[mutate_result_df['Mutant'].str.startswith('Light')].nsmallest(top_k, ['APR', 'Score Difference'])
+                        
+
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.write("Heavy Chain Point Mutation")
+                            st.write("The number of APR in wild heavy chain:", APR_wild_heavy_count)
+                            st.dataframe(heavy_mutants)
+
+                        with col2:
+                            st.write("Light Chain Point Mutation")
+                            st.write("The number of APR in wild light chain:",APR_wild_light_count)
+                            st.dataframe(light_mutants)
+
+                        for mutant in heavy_mutants['Mutant']:
+                            # Split the mutant value into protein type and variant (e.g., "heavy_V3K" -> "heavy", "V3K")
+                            protein_type, variant = mutant.split('_')
+                            
+                            # Append DataFrame for heavy mutations
+                            list_heavy_mutated_dfs.append(all_mutate_out_df[
+                                (all_mutate_out_df['Protein'] == 'Heavy') & 
+                                (all_mutate_out_df['variant'] == variant)
+                            ])
+
+                        for mutant in light_mutants['Mutant']:
+                            # Split the mutant value into protein type and variant (e.g., "light_V4P" -> "light", "V4P")
+                            protein_type, variant = mutant.split('_')
+                            
+                            # Append DataFrame for light mutations
+                            list_light_mutated_dfs.append(all_mutate_out_df[
+                                (all_mutate_out_df['Protein'] == 'Light') & 
+                                (all_mutate_out_df['variant'] == variant)
+                            ])                                             
+
+                        st.subheader(f"Mutation effect comparison on light and heavy chain")
+                        if list_heavy_mutated_dfs:
+                            st.write('- Heavy Chain')
+                            plot_protein_comparison(results_df[results_df['Protein'] == 'Heavy'], list_heavy_mutated_dfs ,'wild',mutate_result_df['Mutant'].head(top_k).tolist())
+                        
+                        if list_light_mutated_dfs:
+                            st.write('- Light Chain')
+                            plot_protein_comparison(results_df[results_df['Protein'] == 'Light'], list_light_mutated_dfs ,'wild',mutate_result_df['Mutant'].head(top_k).tolist())
 
                 with tab2:
                     st.subheader(f'Predicted Aggregation Score Table:')
                     display_aggregation_table(results_df)
-                    
-                
+
             else:
                 st.warning("Please enter both the heavy chain and light chain sequences.")
 
@@ -157,7 +223,7 @@ def main():
             if input_method == "Text Input":
                 fasta_text = st.text_area("Enter FASTA formatted text:", value=st.session_state.fasta_text, height=100)
                 if st.button("Load Example"):
-                    st.session_state.fasta_text = ">AF-21861\nMDTQKDVQPPKQQPMIYICGECHTENEIKSRDPIRCRECGYRIMYKKRTKRLVVFDAR"
+                    st.session_state.fasta_text = ">AF-P00441\nMATKAVCVLKGDGPVQGIINFEQKESNGPVKVWGSIKGLTEGLHGFHVHEFGDNTAGCTSAGPHFNPLSRKHGGPKDEERHVGDLGNVTADKDGVADVSIEDSVISLSGDHCIIGRTLVVHEKADDLGKGGNEESTKTGNAGSRLACGVIGIAQ"
                     fasta_text = st.session_state.fasta_text
                     st.experimental_rerun()  
                 
@@ -179,50 +245,62 @@ def main():
                         tmp_file.write(fasta_file.read())
                         tmp_file_path = tmp_file.name
                 
-
                     headers, protein_sequences = read_fasta(tmp_file_path)
                     os.remove(tmp_file_path)
 
             # Add the 'Auto-Mutate' checkbox
+            st.write('Option:')
             auto_mutate = st.checkbox("Auto-Mutate",help="Automatically mutate the protein to reduce overall aggregation.")
-            use_ddg = st.checkbox("Calculate Energy Change", help="This will calculate the energy change (ΔΔG) upon mutation. \nNote: It may take more time for large proteins or if there are many positive residues.")
-            threshold =  st.slider("Select a value", min_value=0.0, max_value=2.0, step=0.1,help="This is the threshold you want to mutate the residue. The default value is 0.")
-
+            use_ddg = st.checkbox("Calculate Free Energy Change", help="This will calculate the energy change (ΔΔG) upon mutation. \nNote: It may take more time for large proteins or if there are many positive residues.")
+            
 
             if st.button("Predict"):
-                if auto_mutate and len(protein_sequences)>1:
+
+                if any(len(seq) > 1000 for seq in protein_sequences):
+                    st.warning("Protein sequences are longer than 1000 characters. Please shorten the sequences.")
+                elif auto_mutate and len(protein_sequences) > 1:
                     st.warning("Please enter only 1 sequence to use auto-mutate function.")
                 else:
-
                     seed_everything(seed=42)
                     torch.cuda.empty_cache()
                     seq_model.eval()
-                    # print("Model in eval mode:", seq_model.training)
-
+                    
                     if protein_sequences:
                         print("Starting prediction")
                         results_df = perform_prediction(seq_model, protein_sequences, headers, seq_config, device)
 
-       
                         ##mutate the residue
                         if auto_mutate:
                             print("Starting auto-mutate")
 
-                            mutate_result_df = perform_auto_mutate(False,results_df,seq_model,seq_config, device,wild_fasta_path,mutate_fasta_path,var_path,temp_THPLM_dir,embed_dir,use_ddg,threshold)
-                            # st.write(mutate_result_df)
+                            mutate_result_df , all_mutate_out_df = perform_auto_mutate(False,results_df,seq_model,seq_config, device,wild_fasta_path,mutate_fasta_path,var_path,temp_THPLM_dir,embed_dir,use_ddg)
+    
 
                         ## display
                         st.subheader('Predicted Aggregation Score:')
+                        top_k =5
 
                         tab1, tab2 = st.tabs(["🗃 Aggregation Score Predictions", " 📈 Aggregation Score Plots"])
                         with tab1:
                             st.subheader(f'Predicted Aggregation Score Plot:')
                             for protein in results_df['Protein'].unique():
                                 plot_protein_values(results_df[results_df['Protein'] == protein])
-                            if auto_mutate:
-                                st.subheader("Recommendation for new mutants to reduce aggregation:")
-                                st.dataframe(mutate_result_df.head(10))
+
                             
+                    
+                            if auto_mutate:
+                                st.subheader("Suggestions for New Mutants to Minimize Overall Aggregation:")
+
+                                APR_wild_count = results_df[(results_df['Protein'] == protein) & (results_df['Predicted Value'] > 0)].shape[0]
+                                st.write("The number of APR in wild sequence:",APR_wild_count)
+                                st.dataframe(mutate_result_df.head(top_k),hide_index=True)
+                                
+                                mutated_dfs = [all_mutate_out_df[all_mutate_out_df['Protein'] == mutant] 
+                                            for mutant in mutate_result_df['Mutant'].head(top_k)]
+                                
+                                if mutated_dfs:
+                                    st.subheader(f"{protein} - Mutation Comparison")
+                                    plot_protein_comparison(results_df[results_df['Protein'] == protein], mutated_dfs,'wild',mutate_result_df['Mutant'].head(top_k).tolist())
 
                         with tab2:
                             st.subheader(f'Predicted Aggregation Score Table:')
