@@ -12,3 +12,10 @@ preprocess/foldxLinux64_0/
 Tm/
 application/THPLM/
 application/tmp/
+aggrepred/__pycache__/
+aggrepred/weights1/
+aggrepred/weights_antibody/
+application/__pycache__/
+application/apps copy.py
+aggrepred/anti_combined_results.csv
+aggrepred/sorted_combined_results.csv
