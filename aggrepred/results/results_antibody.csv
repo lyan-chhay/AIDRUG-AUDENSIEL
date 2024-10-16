@@ -1,0 +1,9 @@
+R2,PCC,MSE,MAE,AUC-ROC,AUC-PR,MCC,RMSE,Accuracy,Precision,Recall,F1-Score,Model
+0.8211,0.9158,0.1263,0.2367,0.9608,0.8233,0.7164,0.3554,0.9502,0.6085,0.9008,0.7264,./weights_antibody/seq/(onehot)_(combinedloss)_(local_3block256dim)_(global_1layer128_4head)/
+0.835,0.9179,0.1165,0.2384,0.9579,0.81,0.7131,0.3414,0.9511,0.6167,0.8811,0.7256,./weights_antibody/seq/(onehot_meiler)_(combinedloss)_(local_3block256dim)_(global_1layer128_4head)/
+0.827,0.917,0.1222,0.2363,0.9588,0.8127,0.7141,0.3495,0.9503,0.61,0.8933,0.725,./weights_antibody/seq/(esm35M)_(combinedloss)_(local_3block256dim)_(global_1layer128_4head)/
+0.8273,0.9154,0.1219,0.2421,0.9586,0.8049,0.7117,0.3492,0.9498,0.6072,0.8922,0.7226,./weights_antibody/seq/(protbert)_(combinedloss)_(local_3block256dim)_(global_1layer128_4head)/
+0.8243,0.9116,0.1241,0.2411,0.9466,0.7921,0.7165,0.3522,0.954,0.6392,0.8563,0.732,./weights_antibody/seq/(antiberty)_(combinedloss)_(local_3block256dim)_(global_1layer128_4head)/
+0.762,0.8751,0.1698,0.2955,0.92,0.6886,0.5717,0.4121,0.9209,0.4721,0.7875,0.5903,./weights_antibody/seq/(antiberty)_(combinedloss)_(none)/
+0.762,0.8751,0.1698,0.2955,0.92,0.6886,0.5717,0.4121,0.9209,0.4721,0.7875,0.5903,./weights_antibody/seq/(esm35M)_(combinedloss)_(none)/
+0.762,0.8751,0.1698,0.2955,0.92,0.6886,0.5717,0.4121,0.9209,0.4721,0.7875,0.5903,./weights_antibody/seq/(protbert)_(combinedloss)_(none)/
