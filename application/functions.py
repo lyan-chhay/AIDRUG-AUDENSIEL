@@ -1,35 +1,48 @@
+import os
+import sys
+import random
+import json
+import tempfile
+import subprocess
 
-import streamlit as st
+# Data handling and plotting
 import numpy as np
 import pandas as pd
-import os
-import tempfile
-import torch
-import sys 
-from torch.utils.data import DataLoader
-import random
 import matplotlib.pyplot as plt
-from Bio import SeqIO
-import json
 import plotly.express as px
-import esm
-import torch.nn.functional as F
-import subprocess
-from torch_geometric.data import Data
-from torch_geometric.loader import DataLoader as graphDataLoader
 import plotly.graph_objects as go
 
+# PyTorch and related utilities
+import torch
+import torch.nn.functional as F
+from torch.utils.data import DataLoader
+
+# PyTorch Geometric
+from torch_geometric.data import Data
+from torch_geometric.loader import DataLoader as graphDataLoader
+
+# BioPython for sequence handling
+from Bio import SeqIO
+
+# ESM (Evolutionary Scale Modeling)
+import esm
+
+# Streamlit for web app interface
+import streamlit as st
+
+# Custom imports from aggrepred
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../')
-from aggrepred.model import Aggrepred, clean_output
+from aggrepred.seq_model import Aggrepred, clean_output
+from aggrepred.graph_model import EGNN_Model
 from aggrepred.utils import *
 from aggrepred.graph_utils import *
-from aggrepred.graph_model import EGNN_Model, GATModel
-
-top_folder_path = os.path.abspath(os.path.join(os.path.dirname('__file__'), '..'))
-sys.path.insert(0, top_folder_path)
 
 # Set the MKL_THREADING_LAYER environment variable to 'GNU'
 os.environ['MKL_THREADING_LAYER'] = 'GNU'
+
+# Add top-level folder to system path
+top_folder_path = os.path.abspath(os.path.join(os.path.dirname('__file__'), '..'))
+sys.path.insert(0, top_folder_path)
 
 
 ## function to prediction the aggregation
