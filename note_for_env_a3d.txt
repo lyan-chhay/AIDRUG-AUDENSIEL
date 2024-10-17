@@ -1,0 +1,18 @@
+## in case of error with gfortran, find the correct architecture for your machine
+
+# conda install -c anaconda gfortran_osx-64
+conda install -c anaconda gfortran_linux-64
+
+
+## in case of error related to 'Modeller', you might need to add the "key" as follow:
+KEY_MODELLER=MODELIRANJE conda install -c salilab modeller
+
+
+## in case you use 'dynamics ' mode of aggrescan3d, there might be some error, you need to do as follows:
+# #go to this
+# ~/miniconda3/envs/agg3d/lib/python2.7/site-packages/CABS/pdblib.py
+# #change this
+# proc = Popen([self.DSSP_COMMAND, '/dev/stdin'], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+# #to this
+# proc = Popen(['mkdssp', '/dev/stdin'], stdin=PIPE, stdout=PIPE, stderr=PIPE)
+
