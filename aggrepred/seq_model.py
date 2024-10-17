@@ -81,9 +81,7 @@ class LocalExtractorBlock(nn.Module):
         :param mask: a boolean tensor of (bsz x 1 x seqlen)
         :return:
         """
-        # self.conv.weight = self.conv.weight.to(input_tensor.device)
-        # self.conv.bias = self.conv.bias.to(input_tensor.device) if self.conv.bias is not None else None
-    
+  
         o = self.conv(input_tensor)
         o = self.BN(o)
         o = self.leakyrelu(o)
@@ -108,7 +106,6 @@ class LocalExtractorBlock(nn.Module):
         assert padding >= 0, f"Padding must be non-negative but got {padding}."
         return padding
     
-
 
 def generate_attn_mask(batch_size, num_heads, max_length, masks):
     """
@@ -173,44 +170,7 @@ class Att_BiLSTM(nn.Module):
 
         return attn_output, (hn, cn)
     
-    # def forward(self, x, binary_masks):
-    #     # # Sort lengths in descending order
-    #     # sorted_lengths , perm_idx = lengths.sort(0, descending=True)
-    #     # _, unperm_idx = perm_idx.sort(0)
-        
-    #     # x = x[perm_idx]
-
-    #     # # Pack the padded sequence
-    #     # # packed_input = pack_padded_sequence(x, sorted_lengths, batch_first=True, enforce_sorted=True)
-    #     # packed_input = pack_padded_sequence(x, sorted_lengths.cpu().to(torch.int64), batch_first=True, enforce_sorted=True)
-
-    #     # Initial hidden and cell states
-    #     h0 = torch.randn(2 * self.num_layers if self.bidirectional else self.num_layers,
-    #                      x.size(0), self.hidden_size).to(x.device)
-    #     c0 = torch.randn(2 * self.num_layers if self.bidirectional else self.num_layers,
-    #                      x.size(0), self.hidden_size).to(x.device)
-
-    #     # Forward pass through LSTM
-    #     packed_output, (hn, cn) = self.lstm(packed_input, (h0, c0))
-
-    #     # Unpack the output and restore the original order of sequences
-    #     output, _ = pad_packed_sequence(packed_output, total_length=x.size()[1] , batch_first=True)
-    #     output = output[unperm_idx]
-        
-    #     ### Apply MultiHeadAttention
-    #     # Create a mask to ignore padded elements
-    #     mask = generate_attn_mask(x.size(0),self.num_heads, x.size(1), lengths).to(x.device)    #(batch_size, max_length, max_length)
-    #     # attn_output, attn_weight = self.attention(output, output, output)
-    #     attn_output, attn_weight = self.attention(output, output, output, attn_mask=~mask)
-      
-    #     # print("weight:")
-    #     # print(attn_weight.size())
-    #     # print(attn_weight)
-    #     # print("att_out:")
-    #     # print(attn_output.size())
-    #     # print(attn_output)
-        
-    #     return attn_output, (hn, cn)
+  
     
 class GlobalInformationExtractor(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers=1, bidirectional=True, rnn_dropout=0.2, num_heads=1):
@@ -225,6 +185,7 @@ class GlobalInformationExtractor(nn.Module):
         output = self.leakyrelu(output)
         output = self.dropout(output)
         return output, (hn, cn)
+    
 class Aggrepred(nn.Module):
     """
 
@@ -238,10 +199,9 @@ class Aggrepred(nn.Module):
 
         super().__init__()
 
-        # Unpack the configuration dictionary
-        self.use_local = config["use_local"]
-        # self.use_local = config.get("use_local", False)
-        self.use_global = config.get("use_global", False)
+        self.pooling = config.get("pooling", False) 
+        self.use_local = config.get("use_local", True)  # Default to False if not in config
+        self.use_global = config.get("use_global", True)
         
         num_localextractor_block = config.get("num_localextractor_block", 3)
         input_dim = config.get("input_dim", 1000)
@@ -258,7 +218,7 @@ class Aggrepred(nn.Module):
         rnn_dropout = config.get("rnn_dropout", 0.2)
         attention_heads = config.get("attention_heads", 1)
 
-        assert self.use_local or self.use_global, "At least one of the local or global information extractor must be used."
+        # assert self.use_local or self.use_global, "At least one of the local or global information extractor must be used."
 
         out_channel = in_channel if out_channel is None else out_channel
         
@@ -280,27 +240,32 @@ class Aggrepred(nn.Module):
         if self.use_global:
             self.global_extractor = GlobalInformationExtractor(input_size=in_channel, hidden_size=rnn_hid_dim, num_layers=rnn_layers, bidirectional=bidirectional, rnn_dropout=rnn_dropout, num_heads=attention_heads)
 
+        
         rnn_hid_dim = rnn_hid_dim * 2 if bidirectional else rnn_hid_dim
 
-        if self.use_local:
-            fc_in_dim = out_channel + rnn_hid_dim  if self.use_global else out_channel
+        if self.use_local and self.use_global:
+            fc_in_dim = out_channel + rnn_hid_dim
+        elif self.use_local:
+            fc_in_dim = out_channel
+        elif self.use_global:
+            fc_in_dim = rnn_hid_dim
         else:
-            fc_in_dim = rnn_hid_dim 
-
+            fc_in_dim = in_channel
+        
         self.reg_layer = nn.Sequential(
-            nn.Linear(fc_in_dim, fc_in_dim//2),
+            nn.Linear(fc_in_dim, 256),
             nn.LeakyReLU(0.1),
             # nn.ReLU(),
             nn.Dropout(0.5),
-            nn.Linear(fc_in_dim//2, fc_in_dim//4),
+            nn.Linear(256, 128),
             nn.LeakyReLU(0.1),
             # nn.ReLU(),
             nn.Dropout(0.5),
-            nn.Linear(fc_in_dim//4, 1)
+            nn.Linear(128, 1)
         )
+ 
 
-
-    def forward(self, input_tensor: torch.Tensor, banary_mask) -> torch.Tensor:
+    def forward(self, input_tensor: torch.Tensor, binary_mask) -> torch.Tensor:
         """
         
         """
@@ -308,57 +273,36 @@ class Aggrepred(nn.Module):
         #### Local Extracted Information
         # residual connection following 3 layers of local extractor blocks 
 
-        #might use skip connection
-            #TODO: check if skip connection is needed
-            # local_extracted_info = o + input_tensor
-
         if self.use_local:
             residue = self.residue_map(input_tensor)
             o = input_tensor.permute(0, 2, 1)
             residue = residue.permute(0, 2, 1)
             for extractor in self.local_extractors:
-                o = extractor(o, banary_mask)
+                o = extractor(o, binary_mask)
                 o = o + residue
                 residue = o
 
-            # print('in',input_tensor.size())
-            # print('out:',o.size())
-        
-
             local_extracted_info = o.permute(0, 2, 1)
-
-            # print('local:',local_extracted_info.size())
 
 
         #### Local Extracted Information
         if self.use_global:
-            global_extracted_info, (hn,cn) = self.global_extractor(input_tensor, banary_mask)
-
-        
-            # print('global:',global_extracted_info.size())
+            global_extracted_info, (hn,cn) = self.global_extractor(input_tensor, binary_mask)
 
 
-        # Concatenate the local and global information
-        if self.use_local:
-            final_info = torch.cat((local_extracted_info,global_extracted_info), dim=-1) if self.use_global else local_extracted_info
-        else:
+        if self.use_local and self.use_global:
+            final_info = torch.cat((local_extracted_info, global_extracted_info), dim=-1)
+        elif self.use_local:
+            final_info = local_extracted_info
+        elif self.use_global:
             final_info = global_extracted_info
-
-        # print('concat:',final_info.size())
+        else:
+            final_info = input_tensor
 
         reg_output = self.reg_layer(final_info)
         
-        # mask = generate_mask(reg_output.permute(0,2,1), lengths).permute(0,2,1)
-
-        # print('reg:',reg_output.size())
-        # print('bin',bin_output.size())
-        # print('mask',mask.size())
-        # print(mask)
-
         return final_info, reg_output
   
-
-
 
 def clean_output(output_tensor: torch.Tensor, binary_mask: torch.Tensor) -> torch.Tensor:
     """
@@ -391,4 +335,3 @@ def clean_output_batch(output_tensor: torch.Tensor, binary_masks: torch.Tensor) 
 
     # Concatenate the cleaned outputs from all sequences
     return torch.cat(cleaned_outputs, dim=0)
-
