@@ -1,4 +1,3 @@
-
 import os
 import pandas as pd
 import numpy as np
@@ -8,20 +7,55 @@ import re
 import sys
 from scipy.spatial.distance import cdist
 from torch_geometric.data import Data
-
+import ast
 from tqdm import tqdm
-
-top_folder_path = os.path.abspath(os.path.join(os.path.dirname('__file__'), '..'))
-sys.path.insert(0, top_folder_path)
-
-
-from aggrepred.utils import *
-
+import pandas as pd
+import re
 # default values using in training
 NEIGHBOUR_RADIUS = 10
 
+def format_pdb(pdb_file):
+    '''
+    Process pdb file into pandas df
+    
+    Original author: Alissa Hummer
+    
+    :param pdb_file: file path of .pdb file to convert
+    :returns: df with atomic level info
+    '''
+    
+    pd.options.mode.chained_assignment = None
+    pdb_whole = pd.read_csv(pdb_file,header=None,delimiter='\t')
+    pdb_whole.columns = ['pdb']
+    pdb = pdb_whole[pdb_whole['pdb'].str.startswith('ATOM')]
+    pdb['Atom_Num'] = pdb['pdb'].str[6:11].copy()
+    pdb['Atom_Name'] = pdb['pdb'].str[11:16].copy()
+    pdb['AA'] = pdb['pdb'].str[17:20].copy()
+    pdb['Chain'] = pdb['pdb'].str[20:22].copy()
+    pdb['Res_Num'] = pdb['pdb'].str[22:27].copy().str.strip()
+    pdb['x'] = pdb['pdb'].str[27:38].copy()
+    pdb['y'] = pdb['pdb'].str[38:46].copy()
+    pdb['z'] = pdb['pdb'].str[46:54].copy()#
+    pdb['bfactor'] = pdb['pdb'].str[60:66].copy()#
+    pdb['Atom_type'] = pdb['pdb'].str[77].copy()
+    pdb.drop('pdb',axis=1,inplace=True)
+    pdb.replace({' ':''}, regex=True, inplace=True)
+    pdb.reset_index(inplace=True)
+    pdb.drop('index',axis=1,inplace=True)
+    
+    # remove H atoms from our data (interested in heavy atoms only)
+    pdb = pdb[pdb['Atom_type']!='H']
 
+    return pdb
 
+def get_ordered_AA_3_letter_codes():
+    '''
+    '''
+    AA_unique_names = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS',
+                       'GLN', 'GLU', 'GLY', 'HIS', 'ILE',
+                       'LEU', 'LYS', 'MET', 'PHE', 'PRO',
+                       'SER', 'THR', 'TRP', 'TYR', 'VAL']
+    return AA_unique_names
 # ----------------
 # Helper functions
 # ----------------
@@ -67,8 +101,10 @@ def get_Calpha_df(df, chain_id=None):
     if chain_id is None:
         return df[(df["Atom_Name"].str.strip() == "CA")].reset_index(drop=True)
     else:
-        return df[(df["Atom_Name"].str.strip() == "CA") & (df["Chain"].isin(chain_id))].reset_index(drop=True)
-    
+        out = df[(df["Atom_Name"].str.strip() == "CA") & (df["Chain"].isin(chain_id))].reset_index(drop=True)
+        if len(out) == 0:
+            raise ValueError("No matching chain in the PDB file.")
+        return out
 
 
 def get_AA_onehot_features(df,  chain_id=None):
@@ -120,7 +156,7 @@ def get_seq_from_df(df, chainID=None):
     if chainID is None:
         df_Calpha_chain_of_interest = get_Calpha_df(df)
     else:
-        df_Calpha_chain_of_interest = df[(df["Chain"]==chainID) & (df["Atom_Name"]=="CA")]
+        df_Calpha_chain_of_interest = df[(df["Chain"].isin(chainID)) & (df["Atom_Name"]=="CA")]
     
     amino_acids_3letter_list = df_Calpha_chain_of_interest["AA"].values.tolist()
 
@@ -140,10 +176,12 @@ def get_bfactor_from_df(df, chainID=None):
     :param chainID: chain ID of protein in pdb file
     :return: ordered list of str of all res nums in certain chain
     '''
-    if chainID is None:
-        df_Calpha_chain_of_interest = get_Calpha_df(df)
-    else:
-        df_Calpha_chain_of_interest = df[(df["Chain"]==chainID) & (df["Atom_Name"]=="CA")]
+    df_Calpha_chain_of_interest = get_Calpha_df(df,chainID)
+
+    # if chainID is None:
+    #     df_Calpha_chain_of_interest = get_Calpha_df(df)
+    # else:
+    #     df_Calpha_chain_of_interest = df[(df["Chain"]==chainID) & (df["Atom_Name"]=="CA")]
 
     return  df_Calpha_chain_of_interest["bfactor"].values.astype(float).tolist()
 
@@ -212,8 +250,8 @@ def get_all_node_features(df, chain_ids=None):
     '''
 
     return get_AA_onehot_features(df, chain_ids)
-                        
-###########################################
+
+
 
 def adjacency_matrix_to_edge_index(adj_matrix):
     """
@@ -246,12 +284,8 @@ def edge_index_to_adjacency_matrix(edge_index):
     adj_matrix[edge_index[0], edge_index[1]] = 1
     return adj_matrix
 
-
-################################################################################
-
-
-def process_pdb2graph(pdb_path,graph_save_path, score_in_bfactor=True):
-
+def process_pdb2graph(pdb_path,graph_save_path, chain=None,len_cutoff= 500, score_in_bfactor=True):
+    
     # Check if pdb_path exists
     if not os.path.exists(pdb_path):
         raise FileNotFoundError(f"The PDB file path {pdb_path} does not exist.")
@@ -266,17 +300,31 @@ def process_pdb2graph(pdb_path,graph_save_path, score_in_bfactor=True):
 
     pdb_df = format_pdb(pdb_path)
 
-    coors = get_coors(pdb_df).float()
+    coors = get_coors(pdb_df,chain).float()
     coors[coors != coors] = 0  # Replace NaNs with zeros
-    feats = get_all_node_features(pdb_df).float()
-    edges = get_edge_features(pdb_df).float()
+    feats = get_all_node_features(pdb_df,chain).float()
+    edges = get_edge_features(pdb_df,chain).float()
     edge_index = adjacency_matrix_to_edge_index(edges.squeeze(-1))
     
     if score_in_bfactor:
-        scores = get_bfactor_from_df(pdb_df)
+        scores = get_bfactor_from_df(pdb_df,chain)
         y = torch.tensor(scores)
     else:
         y = None
+
+
+    # if len(y) > len_cutoff:
+
+    #     # print("trucate ", len(y) , " to ", len_cutoff)
+    #     ## trucate graph to just a specific size (not too big that cause GPU problem such as 2000nodes)
+    #     feats = feats[:len_cutoff]
+
+    #     # 2. Filter edge indices to include only edges between the first 500 nodes
+    #     mask = (edge_index[0] < len_cutoff) & (edge_index[1] < len_cutoff)
+    #     edge_index = edge_index[:, mask]
+
+    #     coors = coors[:len_cutoff]
+    #     y = y[:len_cutoff]
 
     graph = Data(x=feats, pos=coors, edge_index=edge_index, y=y)
     # Save the graph
@@ -310,9 +358,42 @@ def get_extra_info3D(pdb_path):
     extras = ( AAs, AtomNum, chain, IMGT, x, y, z)
 
 
-# def df2dict(df):
-#     dict = {column: df[column].tolist() for column in df.columns}
-#     return dict
+def process_pdb2graph_withseq(pdb_path,graph_save_path, chain=None,len_cutoff= 500, score_in_bfactor=True):
+    
+    # Check if pdb_path exists
+    if not os.path.exists(pdb_path):
+        raise FileNotFoundError(f"The PDB file path {pdb_path} does not exist.")
+    
+    # Check if graph_save_path exists, if not, create the directory if possible
+    save_dir = os.path.dirname(graph_save_path)
+    if not os.path.exists(save_dir):
+        try:
+            os.makedirs(save_dir)
+        except Exception as e:
+            raise OSError(f"Failed to create directory {save_dir}: {e}")
+
+    pdb_df = format_pdb(pdb_path)
+
+    coors = get_coors(pdb_df,chain).float()
+    coors[coors != coors] = 0  # Replace NaNs with zeros
+    feats = get_all_node_features(pdb_df,chain).float()
+    edges = get_edge_features(pdb_df,chain).float()
+    edge_index = adjacency_matrix_to_edge_index(edges.squeeze(-1))
+    
+    if score_in_bfactor:
+        scores = get_bfactor_from_df(pdb_df,chain)
+        y = torch.tensor(scores)
+    else:
+        y = None
+  
+    seq = get_seq_from_df(pdb_df, chain)
+
+    graph = Data(pos=coors, edge_index=edge_index, seq= seq, y=y)
+    # graph = Data(x=feats, pos=coors, edge_index=edge_index, seq= seq, y=y)
+    # Save the graph
+    torch.save(graph, graph_save_path)
+
+    return graph
 
 
 
