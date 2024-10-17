@@ -1,5 +1,5 @@
 # AggrePred: Residue-Level Prediction of Protein and Antibody Aggregation with Mutation Suggestions for Improved Solubility and Stability
-AIDRUG is a project in Audensiel Healthcare, where it aims to use AI applied in Healthcare. 
+AIDRUG is a project in Audensiel Healthcare, where it aims to use AI applied in Healthcare, specifically in bioinformatics. 
 
 AggrePred, a tool developed during my internship, aimed at predicting the aggregation propensity of proteins and antibodies based on their sequences. The model utilizes advanced deep learning techniques to analyze sequences and provide insights into aggregation risks.
 
@@ -7,6 +7,8 @@ AggrePred, a tool developed during my internship, aimed at predicting the aggreg
 
 - [Installation](#installation)
 - [Usage](#usage)
+- [Link](#link)
+- [Contributor](#contributor)
 
 
 ## Installation
@@ -89,3 +91,12 @@ For further analysis, you can use the **Calculate Free Energy Change option**. T
 ![alt text](image/mutation.png)
 
 
+
+
+
+# Link
+
+In the model training repository, I have tried multiple model with different configuration. If you are interested in exploring all the models, download them [here](https://zenodo.org/records/13943204?preview=1&token=eyJhbGciOiJIUzUxMiJ9.eyJpZCI6IjdkMzE3MzBjLTI0NzYtNDY1OS04MTA5LTBhZjQwZjczNTJjMiIsImRhdGEiOnt9LCJyYW5kb20iOiI1NDhlYTlhM2JiZDBmN2QxNGEyY2M0OWQ1ZDNkNDlhZiJ9.GZwOAgLDr9oHMNrmPqoQd8wXiLpHkbCfsKCjrg-rzdo_XNt6o-lJia-RqHJujiy5bqEimww1RNSmGF1iJQhxkg). 
+
+# Contributor
+Ly An CHHAY :  lyan.chhay@gmail.com
