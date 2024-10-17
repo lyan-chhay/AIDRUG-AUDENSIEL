@@ -19,3 +19,5 @@ application/__pycache__/
 application/apps copy.py
 aggrepred/anti_combined_results.csv
 aggrepred/sorted_combined_results.csv
+data/pdb_antibody
+preprocess/tmp
