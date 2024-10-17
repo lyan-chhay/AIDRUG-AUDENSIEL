@@ -1,35 +1,51 @@
-import streamlit as st
+import os
+import sys
+import random
+import json
+import tempfile
+import subprocess
+
+# Data handling and plotting
 import numpy as np
 import pandas as pd
-import os
-import tempfile
-import torch
-import sys 
-from torch.utils.data import DataLoader
-import random
 import matplotlib.pyplot as plt
-from Bio import SeqIO
-import json
 import plotly.express as px
-import esm
+import plotly.graph_objects as go
+
+# PyTorch and related utilities
+import torch
 import torch.nn.functional as F
-import subprocess
+from torch.utils.data import DataLoader
+
+# PyTorch Geometric
 from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader as graphDataLoader
 
+# BioPython for sequence handling
+from Bio import SeqIO
+
+# ESM (Evolutionary Scale Modeling)
+import esm
+
+# Streamlit for web app interface
+import streamlit as st
+
+# Custom imports from aggrepred
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../')
 from aggrepred.seq_model import Aggrepred, clean_output
+from aggrepred.graph_model import EGNN_Model
 from aggrepred.utils import *
 from aggrepred.graph_utils import *
-from aggrepred.graph_model import EGNN_Model
-from functions import *
-
-top_folder_path = os.path.abspath(os.path.join(os.path.dirname('__file__'), '..'))
-sys.path.insert(0, top_folder_path)
 
 # Set the MKL_THREADING_LAYER environment variable to 'GNU'
 os.environ['MKL_THREADING_LAYER'] = 'GNU'
 
+# Add top-level folder to system path
+top_folder_path = os.path.abspath(os.path.join(os.path.dirname('__file__'), '..'))
+sys.path.insert(0, top_folder_path)
+
+
+from functions import *
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -56,8 +72,42 @@ def main():
     ##########################################
     ### start the application interface from here
     ##########################################
-    st.title("AggrePred: Aggregation Scores Prediction Tool for Proteins/Antibody")
+    st.title("AggrePred: Aggregation Scores Prediction Tool for Proteins and Antibodies")
+    
 
+    with st.expander("Description"):
+        st.image("goal.png", caption="Prediction Overview")
+        st.write("""
+        ### Project Overview:
+        AggrePred, aims at predicting the Aggregation Propensity of proteins and antibodies based on their sequences. The model utilizes advanced deep learning techniques to analyze sequences and provide insights into aggregation risks.
+        
+        ### Input Options
+        You can input your protein sequence in FASTA format either by typing directly into the input field or uploading a FASTA file. 
+        The file upload option allows for multiple protein predictions at once.
+        
+        ### Prediction
+        Once the input is provided, click **Predict** to begin the analysis. Two result tabs will appear:
+        
+        - **AP score Plot**:  
+        This tab displays a line plot showing the aggregation propensity (AP) score for each residue of the protein. 
+        You can hover over the plot to view detailed information such as residue position, amino acid, and AP score.
+        
+        - **AP Score Table**:  
+        This tab contains a table listing the AP scores. Positive AP scores (indicative of aggregation-prone residues) 
+        are highlighted in yellow. There is also a download button to download the AP scores in CSV format.
+        
+        ### Advanced Options
+        **Auto-Mutation**  
+        The Auto-Mutate option automatically suggests mutations to reduce overall aggregation. 
+        It replaces all residues with positive AP scores (APR) with more soluble and stable amino acids (e.g., E, D, K, R).
+        
+        The mutated sequence with the lowest number of APRs and average AP scores is recommended.
+        
+        **Free Energy Change Calculation**  
+        For further analysis, you can use the **Calculate Free Energy Change** option. This feature calculates the difference in free energy 
+        between the wild-type and mutated sequences. A negative value indicates that the mutated sequence is more stable than the original.
+        """)
+  
     if "fasta_text" not in st.session_state:
         st.session_state.fasta_text = ""
 
