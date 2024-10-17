@@ -18,10 +18,10 @@ from torch_geometric.data import Data
 from torch_geometric.loader import DataLoader as graphDataLoader
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../')
-from aggrepred.model import Aggrepred, clean_output
+from aggrepred.seq_model import Aggrepred, clean_output
 from aggrepred.utils import *
 from aggrepred.graph_utils import *
-from aggrepred.graph_model import EGNN_Model, GATModel
+from aggrepred.graph_model import EGNN_Model
 from functions import *
 
 top_folder_path = os.path.abspath(os.path.join(os.path.dirname('__file__'), '..'))
