@@ -35,7 +35,7 @@ This conda env is for preprocessing part, A3D package, as it required python 2.7
 ```conda env create -f environment_a3d.yml```
 
 
-### THPLM (Model for calculatign ddg)
+### THPLM (Model for ddg calculation)
 ```bash
 cd application
 git clone https://github.com/FPPGroup/THPLM.git
