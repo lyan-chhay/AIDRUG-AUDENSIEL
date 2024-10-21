@@ -1,0 +1,11 @@
+name: a3d
+channels:
+  - defaults
+  - salilab
+dependencies:
+  - python=2.7
+  - gfortran_linux-64
+  - modeller
+  - cabs
+  - dssp
+prefix: /users/eleves-b/2023/ly-an.chhay/.conda/envs/a3d
