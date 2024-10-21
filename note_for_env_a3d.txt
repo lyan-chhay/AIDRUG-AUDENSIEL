@@ -1,3 +1,8 @@
+## The environment a3d is used basically for running A3D for protein, the installation might difer from one platform to another (macos, window, linux).
+## In my case , i run on linux, if there is any trouble installing with "environment_a3d.yml" , go  https://bitbucket.org/lcbio/aggrescan3d/src/master/  to see more.
+
+
+
 ## in case of error with gfortran, find the correct architecture for your machine
 
 # conda install -c anaconda gfortran_osx-64
