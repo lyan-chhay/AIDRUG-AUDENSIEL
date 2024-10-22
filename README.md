@@ -1,7 +1,9 @@
 # AggrePred: Residue-Level Prediction of Protein and Antibody Aggregation with Mutation Suggestions for Improved Solubility and Stability
-AIDRUG is a project in Audensiel Healthcare, where it aims to use AI applied in Healthcare, specifically in bioinformatics. 
+AIDRUG is a project under Audensiel Healthcare that focuses on leveraging AI in healthcare, particularly in bioinformatics and optimizing pharmaceutical manufacturing processes, such as the production of monoclonal antibodies.
 
-AggrePred, a tool developed during my internship, aimed at predicting the aggregation propensity of proteins and antibodies based on their sequences. The model utilizes advanced deep learning techniques to analyze sequences and provide insights into aggregation risks.
+Protein aggregation is a key factor in several human diseases, including Alzheimer’s and cancer. It also contributes to significant product loss in the pharmaceutical industry, particularly in protein-based drugs like antibodies. Therefore, understanding and predicting the aggregation propensity of proteins is critical.
+
+As part of my internship, AggrePred was developed—a tool designed to predict the aggregation propensity of proteins and antibodies based on their sequences. The model utilizes advanced deep learning techniques to analyze these sequences and provide insights into potential aggregation risks.
 
 ![alt text](image/goal.png)
 
