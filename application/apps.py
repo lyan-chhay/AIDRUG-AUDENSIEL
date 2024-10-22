@@ -151,7 +151,7 @@ def main():
         st.write('Option:')
         auto_mutate = st.checkbox("Auto-Mutate",help="Automatically mutate the protein to reduce overall aggregation.")
         use_ddg = st.checkbox("Calculate Free Energy Change", help="This will calculate the energy change (ΔΔG) upon mutation. \nNote: It may take more time for large proteins or if there are many positive residues.")
-
+        st.write("Note: Avoid using the 'Calculate Free Energy Change' function if you don't have access to a GPU. Even with a GPU, the process can be time-consuming due to the use of the ESM-3B model from THPLM.")
         
         if st.button("Predict"):
 
@@ -302,7 +302,7 @@ def main():
             st.write('Option:')
             auto_mutate = st.checkbox("Auto-Mutate",help="Automatically mutate the protein to reduce overall aggregation.")
             use_ddg = st.checkbox("Calculate Free Energy Change", help="This will calculate the energy change (ΔΔG) upon mutation. \nNote: It may take more time for large proteins or if there are many positive residues.")
-            
+            st.write("Note: Avoid using the 'Calculate Free Energy Change' function if you don't have access to a GPU. Even with a GPU, the process can be time-consuming due to the use of the ESM-3B model from THPLM.")
 
             if st.button("Predict"):
 
