@@ -28,11 +28,14 @@ cd AIDRUG-AUDENSIEL
 ### Dependencies
 This conda env is for the application and training code
 
+
+for linux machine (same as machine i worked on):
+
 ```conda env create -f environment.yml```
 
-This conda env is for preprocessing part, A3D package, as it required python 2.7.0
+or (in case the above command does not work, this commnand is for cross-platform such as macos or window)
 
-```conda env create -f environment_a3d.yml```
+```conda env create -f env.yml```
 
 
 ### THPLM (Model for ddg calculation)
